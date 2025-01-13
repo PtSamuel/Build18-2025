@@ -158,32 +158,6 @@ void app_main(void)
     st7789_driver_hw_init(&st7789_config);
 
     st7789_lcd_backlight(true);         //打开背光
-    
-    // const int pixel_num = 160 * 160;
-    // uint8_t *color_buf = heap_caps_malloc(pixel_num * 2, MALLOC_CAP_DMA);
-    // for(int i = 0; i < pixel_num; i++) {
-
-    //     int sector_num = (int)((float)i / pixel_num * 16);
-
-    //     if(sector_num < 8) {
-    //         color_buf[2 * i] = 1UL << sector_num;
-    //         color_buf[2 * i + 1] = 0;
-    //     } else {
-    //         color_buf[2 * i] = 0;
-    //         color_buf[2 * i + 1] = 1UL << (sector_num - 8);
-    //     }
-
-    //     // if(3 * i < pixel_num) {
-    //     //     color_buf[2 * i] = 0xF1;
-    //     //     color_buf[2 * i + 1] = 0;
-    //     // } else if(3 * i < pixel_num * 2) {
-    //     //     color_buf[2 * i] = 0x07;
-    //     //     color_buf[2 * i + 1] = 0xE0;
-    //     // } else {
-    //     //     color_buf[2 * i] = 0;
-    //     //     color_buf[2 * i + 1] = 0x1F;
-    //     // }
-    // }
 
     draw(0, 10, 0, 100, 0x8000);
     draw(10, 20, 0, 100, 0x4000);
@@ -227,59 +201,45 @@ void app_main(void)
     ESP_ERROR_CHECK(uart_enable_rx_intr(UART_NUM_2));
     uart_enable_pattern_det_baud_intr(UART_NUM_2, '\n', 1, 1, 0, 0);
     
-    // for(int i = 10; i > 0; i--) {
-    //     ESP_LOGI(TAG, "Mounting SD card after %d seconds...", i);
-    //     vTaskDelay(pdMS_TO_TICKS(1000));
-    // }
-
     esp_err_t ret;
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {
-        .format_if_mount_failed = true,     //挂载失败是否执行格式化
-        .max_files = 5,                     //最大可打开文件数
-        .allocation_unit_size = 16 * 1024   //执行格式化时的分配单元大小（分配单元越大，读写越快）
+        .format_if_mount_failed = false,
+        .max_files = 5,
+        .allocation_unit_size = 16 * 1024
     };
     sdmmc_card_t *card;
     const char mount_point[] = MOUNT_POINT;
     ESP_LOGI(TAG, "Initializing SD card");
 
-    ESP_LOGI(TAG, "Using SDMMC peripheral");
+    ESP_LOGI(TAG, "Using SPI peripheral");
+    sdmmc_host_t host = SDSPI_HOST_DEFAULT();
+    host.max_frequency_khz = 4000;
 
-    //默认配置，速度20MHz,使用卡槽1
-    sdmmc_host_t host = SDMMC_HOST_DEFAULT();
-    host.max_freq_khz = 5000;
-    ESP_LOGI(TAG, "Max frequency: %d kHz", host.max_freq_khz);
+    spi_bus_config_t bus_cfg = {
+        .mosi_io_num = GPIO_NUM_22,
+        .miso_io_num = GPIO_NUM_23,
+        .sclk_io_num = GPIO_NUM_27,
+        .quadwp_io_num = -1,
+        .quadhd_io_num = -1,
+        .max_transfer_sz = 4000,
+    };
+    ret = spi_bus_initialize(host.slot, &bus_cfg, SDSPI_DEFAULT_DMA);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize bus.");
+        return;
+    }
 
-    //默认的IO管脚配置，
-    sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
-    slot_config.cd = SDMMC_SLOT_NO_CD;
-    slot_config.wp = SDMMC_SLOT_NO_WP;
-
-    //4位数据
-    slot_config.width = 4;
-
-    // slot_config.d0 = GPIO_NUM_16;
-    // slot_config.d2 = GPIO_NUM_27;
-
-    //不适用通过IO矩阵进行映射的管脚，只使用默认支持的SDMMC管脚，可以获得最大性能
-    #if 0
-    slot_config.clk = CONFIG_EXAMPLE_PIN_CLK;
-    slot_config.cmd = CONFIG_EXAMPLE_PIN_CMD;
-    slot_config.d0 = CONFIG_EXAMPLE_PIN_D0;
-    slot_config.d1 = CONFIG_EXAMPLE_PIN_D1;
-    slot_config.d2 = CONFIG_EXAMPLE_PIN_D2;
-    slot_config.d3 = CONFIG_EXAMPLE_PIN_D3;
-    #endif
-    // Enable internal pullups on enabled pins. The internal pullups
-    // are insufficient however, please make sure 10k external pullups are
-    // connected on the bus. This is for debug / example purpose only.
-    //管脚启用内部上拉
-    slot_config.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
+    sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
+    slot_config.gpio_cs = GPIO_NUM_25;
+    slot_config.host_id = host.slot;
 
     ESP_LOGI(TAG, "Mounting filesystem");
-    ret = esp_vfs_fat_sdmmc_mount(mount_point, &host, &slot_config, &mount_config, &card);
+    ret = esp_vfs_fat_sdspi_mount(mount_point, &host, &slot_config, &mount_config, &card);
+
     if (ret != ESP_OK) {
         if (ret == ESP_FAIL) {
-            ESP_LOGE(TAG, "Failed to mount filesystem. ");
+            ESP_LOGE(TAG, "Failed to mount filesystem. "
+                     "If you want the card to be formatted, set the CONFIG_EXAMPLE_FORMAT_IF_MOUNT_FAILED menuconfig option.");
         } else {
             ESP_LOGE(TAG, "Failed to initialize the card (%s). "
                      "Make sure SD card lines have pull-up resistors in place.", esp_err_to_name(ret));
@@ -288,6 +248,7 @@ void app_main(void)
     }
     ESP_LOGI(TAG, "Filesystem mounted");
 
+    sdmmc_card_print_info(stdout, card);
 
     while(1)
     {
