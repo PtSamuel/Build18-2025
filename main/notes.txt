@@ -1,0 +1,1 @@
+C:\Users\26958\.espressif\python_env\idf5.3_py3.11_env\Scripts\python.exe C:\Users\26958\esp\v5.3.2\esp-idf\components/esptool_py/esptool/espefuse.py set_flash_voltage -p COM3 3.3V
