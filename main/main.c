@@ -136,6 +136,18 @@ static esp_err_t s_example_read_file(const char *path)
     return ESP_OK;
 }
 
+// static void cs_high(spi_transaction_t* t)
+// {
+//     ESP_EARLY_LOGV(TAG, "cs high %d.", GPIO_NUM_25);
+//     gpio_set_level(GPIO_NUM_25, 1);
+// }
+
+// static void cs_low(spi_transaction_t* t)
+// {
+//     gpio_set_level(GPIO_NUM_25, 0);
+//     ESP_EARLY_LOGV(TAG, "cs low %d.", GPIO_NUM_25);
+// }
+
 // 主函数
 void app_main(void)
 {
@@ -213,46 +225,97 @@ void app_main(void)
 
     ESP_LOGI(TAG, "Using SPI peripheral");
     sdmmc_host_t host = SDSPI_HOST_DEFAULT();
-    host.max_frequency_khz = 4000;
 
-    spi_bus_config_t bus_cfg = {
-        .mosi_io_num = GPIO_NUM_22,
-        .miso_io_num = GPIO_NUM_23,
+    // spi_bus_config_t bus_cfg = {
+    //     .mosi_io_num = GPIO_NUM_22,
+    //     .miso_io_num = GPIO_NUM_23,
+    //     .sclk_io_num = GPIO_NUM_27,
+    //     .quadwp_io_num = -1,
+    //     .quadhd_io_num = -1,
+    //     .max_transfer_sz = 4000,
+    // };
+    // ret = spi_bus_initialize(host.slot, &bus_cfg, SDSPI_DEFAULT_DMA);
+    // if (ret != ESP_OK) {
+    //     ESP_LOGE(TAG, "Failed to initialize bus.");
+    //     return;
+    // }
+
+    // sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
+    // slot_config.gpio_cs = GPIO_NUM_25;
+    // slot_config.host_id = host.slot;
+
+    // ESP_LOGI(TAG, "Mounting filesystem");
+    // ret = esp_vfs_fat_sdspi_mount(mount_point, &host, &slot_config, &mount_config, &card);
+
+    // if (ret != ESP_OK) {
+    //     if (ret == ESP_FAIL) {
+    //         ESP_LOGE(TAG, "Failed to mount filesystem. "
+    //                  "If you want the card to be formatted, set the CONFIG_EXAMPLE_FORMAT_IF_MOUNT_FAILED menuconfig option.");
+    //     } else {
+    //         ESP_LOGE(TAG, "Failed to initialize the card (%s). "
+    //                  "Make sure SD card lines have pull-up resistors in place.", esp_err_to_name(ret));
+    //     }
+    //     return;
+    // }
+    // ESP_LOGI(TAG, "Filesystem mounted");
+
+    // sdmmc_card_print_info(stdout, card);
+
+    spi_device_handle_t spi;
+    spi_bus_config_t buscfg = {
+        .miso_io_num = GPIO_NUM_22,
+        .mosi_io_num = GPIO_NUM_23,
         .sclk_io_num = GPIO_NUM_27,
         .quadwp_io_num = -1,
         .quadhd_io_num = -1,
-        .max_transfer_sz = 4000,
     };
-    ret = spi_bus_initialize(host.slot, &bus_cfg, SDSPI_DEFAULT_DMA);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to initialize bus.");
-        return;
+    spi_device_interface_config_t devcfg = {
+        .command_bits = 0,
+        .clock_speed_hz = 1 * 1000 * 1000,     // Clock out at 1 MHz
+        .mode = 3,                              // SPI mode 0
+        .spics_io_num = GPIO_NUM_25,             // CS pin
+        .queue_size = 1,       
+        // .pre_cb = cs_high,
+        // .post_cb = cs_low,              
+    };
+    //Initialize the SPI bus
+    ret = spi_bus_initialize(SPI3_HOST, &buscfg, SPI_DMA_CH_AUTO);
+    ESP_ERROR_CHECK(ret);
+    //Attach the LCD to the SPI bus
+    ret = spi_bus_add_device(SPI3_HOST, &devcfg, &spi);
+    ESP_ERROR_CHECK(ret);
+
+    gpio_config_t cs_cfg = {
+        .pin_bit_mask = BIT64(GPIO_NUM_25),
+        .mode = GPIO_MODE_OUTPUT,
+    };
+    gpio_config(&cs_cfg);
+
+    spi_transaction_t t = {
+        .length = 8,
+        .tx_data = {0x80 | 0x34},
+        .rxlength = 8,
+        .flags = SPI_TRANS_USE_TXDATA | SPI_TRANS_USE_RXDATA,
+    };
+
+    esp_err_t err;
+    err = spi_device_acquire_bus(spi, portMAX_DELAY);
+    if(err != ESP_OK) {
+        ESP_LOGE(TAG, "Failure acquiring bus", esp_err_to_name(err));
     }
-
-    sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
-    slot_config.gpio_cs = GPIO_NUM_25;
-    slot_config.host_id = host.slot;
-
-    ESP_LOGI(TAG, "Mounting filesystem");
-    ret = esp_vfs_fat_sdspi_mount(mount_point, &host, &slot_config, &mount_config, &card);
-
-    if (ret != ESP_OK) {
-        if (ret == ESP_FAIL) {
-            ESP_LOGE(TAG, "Failed to mount filesystem. "
-                     "If you want the card to be formatted, set the CONFIG_EXAMPLE_FORMAT_IF_MOUNT_FAILED menuconfig option.");
-        } else {
-            ESP_LOGE(TAG, "Failed to initialize the card (%s). "
-                     "Make sure SD card lines have pull-up resistors in place.", esp_err_to_name(ret));
-        }
-        return;
-    }
-    ESP_LOGI(TAG, "Filesystem mounted");
-
-    sdmmc_card_print_info(stdout, card);
-
     while(1)
     {
-        vTaskDelay(pdMS_TO_TICKS(10));
+        // err = spi_device_polling_transmit(spi, &t);
+        err = spi_device_transmit(spi, &t);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failure reading register: %s", esp_err_to_name(err));
+        } else {
+            ESP_LOGI(TAG, "Register value: (%d, %d, %d, %d)", t.rx_data[0], t.rx_data[1], t.rx_data[2], t.rx_data[3]);
+        }
+        
+        vTaskDelay(pdMS_TO_TICKS(500));
+
+        // vTaskDelay(pdMS_TO_TICKS(10));
         lv_task_handler();
         // st7789_flush(50, 210, 0, 160, color_buf);
         // draw(0, 20, 0, 100, 0x8000);
