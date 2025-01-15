@@ -15,8 +15,12 @@
 #include "sdmmc_cmd.h"
 #include "driver/sdmmc_host.h"
 
+#include <math.h>
+
 #define LCD_WIDTH   280
 #define LCD_HEIGHT  240
+
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 static QueueHandle_t uart_queue;
 static uint8_t uart_buffer[1024];
@@ -46,18 +50,16 @@ static void uart_event_task(void *pvParameters) {
     {
         if (xQueueReceive(uart_queue, (void*)&event, (TickType_t)portMAX_DELAY)) 
         {
-            ESP_LOGI(TAG, "uart event:");
             switch (event.type) {
             case UART_PATTERN_DET:
-                ESP_LOGI(TAG, "[UART DATA]: %d", event.size);
                 uart_read_bytes(UART_NUM_2, uart_buffer, event.size, portMAX_DELAY);
-                ESP_LOGI(TAG, "[DATA EVT]: %s", uart_buffer);
-                uart_write_bytes(UART_NUM_2, uart_buffer, event.size);
+                ESP_LOGI(TAG, "[DET (%d)] %s", event.size, uart_buffer);
                 break;
             case UART_DATA:
-                uart_read_bytes(UART_NUM_2, uart_buffer, event.size, portMAX_DELAY);
-                ESP_LOGI(TAG, "[DATA EVT (%d)]: %s", event.size, uart_buffer);
-                uart_write_bytes(UART_NUM_2, uart_buffer, event.size);
+                int read_length = uart_read_bytes(UART_NUM_2, uart_buffer, event.size, portMAX_DELAY);
+                read_length = MIN(sizeof(uart_buffer), read_length);
+                uart_buffer[read_length] = '\0';
+                ESP_LOGI(TAG, "[DATA (%d)]: %s", event.size, uart_buffer);
                 break;
             //Event of HW FIFO overflow detected
             case UART_FIFO_OVF:
@@ -201,66 +203,68 @@ void app_main(void)
     };
     uart_driver_install(UART_NUM_2, 1024, 1024, 20, &uart_queue, 0);
     uart_param_config(UART_NUM_2, &uart_config);
-    uart_set_pin(UART_NUM_2, GPIO_NUM_32, GPIO_NUM_33, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    uart_set_pin(UART_NUM_2, GPIO_NUM_17, GPIO_NUM_16, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
     xTaskCreatePinnedToCore(uart_event_task, "uart", 4096, NULL, 3, NULL, 1);
 
-    uart_intr_config_t uart_intr = {
-        .intr_enable_mask = UART_PATTERN_DET,
-        .rxfifo_full_thresh = 100,
-        .rx_timeout_thresh = 10,
-    };
-    ESP_ERROR_CHECK(uart_intr_config(UART_NUM_2, &uart_intr));
-    ESP_ERROR_CHECK(uart_enable_rx_intr(UART_NUM_2));
-    uart_enable_pattern_det_baud_intr(UART_NUM_2, '\n', 1, 1, 0, 0);
+    // uart_intr_config_t uart_intr = {
+    //     .intr_enable_mask = UART_PATTERN_DET,
+    //     .rxfifo_full_thresh = 100,
+    //     .rx_timeout_thresh = 10,
+    // };
+    // ESP_ERROR_CHECK(uart_intr_config(UART_NUM_2, &uart_intr));
+    // ESP_ERROR_CHECK(uart_enable_rx_intr(UART_NUM_2));
+    // uart_enable_pattern_det_baud_intr(UART_NUM_2, '\n', 1, 9, 0, 0);
+    // uart_pattern_queue_reset(UART_NUM_2, 128);
+    // uart_flush(UART_NUM_2);
     
-    esp_err_t ret;
-    esp_vfs_fat_sdmmc_mount_config_t mount_config = {
-        .format_if_mount_failed = true,
-        .max_files = 5,
-        .allocation_unit_size = 16 * 1024
-    };
-    sdmmc_card_t *card;
-    const char mount_point[] = MOUNT_POINT;
-    ESP_LOGI(TAG, "Initializing SD card");
+    // esp_err_t ret;
+    // esp_vfs_fat_sdmmc_mount_config_t mount_config = {
+    //     .format_if_mount_failed = true,
+    //     .max_files = 5,
+    //     .allocation_unit_size = 16 * 1024
+    // };
+    // sdmmc_card_t *card;
+    // const char mount_point[] = MOUNT_POINT;
+    // ESP_LOGI(TAG, "Initializing SD card");
 
-    ESP_LOGI(TAG, "Using SDMMC peripheral");
+    // ESP_LOGI(TAG, "Using SDMMC peripheral");
 
-    sdmmc_host_t host = SDMMC_HOST_DEFAULT();
-    // host.max_freq_khz = SDMMC_FREQ_PROBING;
-    sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
-    slot_config.cd = SDMMC_SLOT_NO_CD;
-    slot_config.wp = SDMMC_SLOT_NO_WP;
-    slot_config.width = 1;
-    slot_config.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
+    // sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+    // // host.max_freq_khz = SDMMC_FREQ_PROBING;
+    // sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
+    // slot_config.cd = SDMMC_SLOT_NO_CD;
+    // slot_config.wp = SDMMC_SLOT_NO_WP;
+    // slot_config.width = 1;
+    // slot_config.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
 
-    ESP_LOGI(TAG, "Mounting filesystem");
-    ret = esp_vfs_fat_sdmmc_mount(mount_point, &host, &slot_config, &mount_config, &card);
+    // ESP_LOGI(TAG, "Mounting filesystem");
+    // ret = esp_vfs_fat_sdmmc_mount(mount_point, &host, &slot_config, &mount_config, &card);
 
-    if (ret != ESP_OK) {
-        if (ret == ESP_FAIL) {
-            ESP_LOGE(TAG, "Failed to mount filesystem. ");
-        } else {
-            ESP_LOGE(TAG, "Failed to initialize the card (%s). "
-                     "Make sure SD card lines have pull-up resistors in place.", esp_err_to_name(ret));
-        }
-        return;
-    }
-    ESP_LOGI(TAG, "Filesystem mounted");
+    // if (ret != ESP_OK) {
+    //     if (ret == ESP_FAIL) {
+    //         ESP_LOGE(TAG, "Failed to mount filesystem. ");
+    //     } else {
+    //         ESP_LOGE(TAG, "Failed to initialize the card (%s). "
+    //                  "Make sure SD card lines have pull-up resistors in place.", esp_err_to_name(ret));
+    //     }
+    //     return;
+    // }
+    // ESP_LOGI(TAG, "Filesystem mounted");
 
-    sdmmc_card_print_info(stdout, card);
+    // sdmmc_card_print_info(stdout, card);
 
-    const char *file_hello = MOUNT_POINT"/hello.txt";
-    char data[EXAMPLE_MAX_CHAR_SIZE];
-    snprintf(data, EXAMPLE_MAX_CHAR_SIZE, "%s %s!\n", "Hello", card->cid.name);
-    ret = s_example_write_file(file_hello, data);
-    if (ret != ESP_OK) {
-        return;
-    }
+    // const char *file_hello = MOUNT_POINT"/hello.txt";
+    // char data[EXAMPLE_MAX_CHAR_SIZE];
+    // snprintf(data, EXAMPLE_MAX_CHAR_SIZE, "%s %s!\n", "Hello", card->cid.name);
+    // ret = s_example_write_file(file_hello, data);
+    // if (ret != ESP_OK) {
+    //     return;
+    // }
 
-    ret = s_example_read_file(file_hello);
-    if (ret != ESP_OK) {
-        return;
-    }
+    // ret = s_example_read_file(file_hello);
+    // if (ret != ESP_OK) {
+    //     return;
+    // }
 
     // ESP_LOGI(TAG, "Using SPI peripheral");
     // sdmmc_host_t host = SDSPI_HOST_DEFAULT();
