@@ -215,7 +215,7 @@ void app_main(void)
     
     esp_err_t ret;
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {
-        .format_if_mount_failed = false,
+        .format_if_mount_failed = true,
         .max_files = 5,
         .allocation_unit_size = 16 * 1024
     };
@@ -223,8 +223,47 @@ void app_main(void)
     const char mount_point[] = MOUNT_POINT;
     ESP_LOGI(TAG, "Initializing SD card");
 
-    ESP_LOGI(TAG, "Using SPI peripheral");
-    sdmmc_host_t host = SDSPI_HOST_DEFAULT();
+    ESP_LOGI(TAG, "Using SDMMC peripheral");
+
+    sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+    // host.max_freq_khz = SDMMC_FREQ_PROBING;
+    sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
+    slot_config.cd = SDMMC_SLOT_NO_CD;
+    slot_config.wp = SDMMC_SLOT_NO_WP;
+    slot_config.width = 1;
+    slot_config.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
+
+    ESP_LOGI(TAG, "Mounting filesystem");
+    ret = esp_vfs_fat_sdmmc_mount(mount_point, &host, &slot_config, &mount_config, &card);
+
+    if (ret != ESP_OK) {
+        if (ret == ESP_FAIL) {
+            ESP_LOGE(TAG, "Failed to mount filesystem. ");
+        } else {
+            ESP_LOGE(TAG, "Failed to initialize the card (%s). "
+                     "Make sure SD card lines have pull-up resistors in place.", esp_err_to_name(ret));
+        }
+        return;
+    }
+    ESP_LOGI(TAG, "Filesystem mounted");
+
+    sdmmc_card_print_info(stdout, card);
+
+    const char *file_hello = MOUNT_POINT"/hello.txt";
+    char data[EXAMPLE_MAX_CHAR_SIZE];
+    snprintf(data, EXAMPLE_MAX_CHAR_SIZE, "%s %s!\n", "Hello", card->cid.name);
+    ret = s_example_write_file(file_hello, data);
+    if (ret != ESP_OK) {
+        return;
+    }
+
+    ret = s_example_read_file(file_hello);
+    if (ret != ESP_OK) {
+        return;
+    }
+
+    // ESP_LOGI(TAG, "Using SPI peripheral");
+    // sdmmc_host_t host = SDSPI_HOST_DEFAULT();
 
     // spi_bus_config_t bus_cfg = {
     //     .mosi_io_num = GPIO_NUM_22,
@@ -261,61 +300,61 @@ void app_main(void)
 
     // sdmmc_card_print_info(stdout, card);
 
-    spi_device_handle_t spi;
-    spi_bus_config_t buscfg = {
-        .miso_io_num = GPIO_NUM_22,
-        .mosi_io_num = GPIO_NUM_23,
-        .sclk_io_num = GPIO_NUM_27,
-        .quadwp_io_num = -1,
-        .quadhd_io_num = -1,
-    };
-    spi_device_interface_config_t devcfg = {
-        .command_bits = 0,
-        .clock_speed_hz = 1 * 1000 * 1000,     // Clock out at 1 MHz
-        .mode = 3,                              // SPI mode 0
-        .spics_io_num = GPIO_NUM_25,             // CS pin
-        .queue_size = 1,       
-        // .pre_cb = cs_high,
-        // .post_cb = cs_low,              
-    };
-    //Initialize the SPI bus
-    ret = spi_bus_initialize(SPI3_HOST, &buscfg, SPI_DMA_CH_AUTO);
-    ESP_ERROR_CHECK(ret);
-    //Attach the LCD to the SPI bus
-    ret = spi_bus_add_device(SPI3_HOST, &devcfg, &spi);
-    ESP_ERROR_CHECK(ret);
+    // spi_device_handle_t spi;
+    // spi_bus_config_t buscfg = {
+    //     .miso_io_num = GPIO_NUM_22,
+    //     .mosi_io_num = GPIO_NUM_23,
+    //     .sclk_io_num = GPIO_NUM_27,
+    //     .quadwp_io_num = -1,
+    //     .quadhd_io_num = -1,
+    // };
+    // spi_device_interface_config_t devcfg = {
+    //     .command_bits = 0,
+    //     .clock_speed_hz = 1 * 1000 * 1000,     // Clock out at 1 MHz
+    //     .mode = 3,                              // SPI mode 0
+    //     .spics_io_num = GPIO_NUM_25,             // CS pin
+    //     .queue_size = 1,       
+    //     // .pre_cb = cs_high,
+    //     // .post_cb = cs_low,              
+    // };
+    // //Initialize the SPI bus
+    // ret = spi_bus_initialize(SPI3_HOST, &buscfg, SPI_DMA_CH_AUTO);
+    // ESP_ERROR_CHECK(ret);
+    // //Attach the LCD to the SPI bus
+    // ret = spi_bus_add_device(SPI3_HOST, &devcfg, &spi);
+    // ESP_ERROR_CHECK(ret);
 
-    gpio_config_t cs_cfg = {
-        .pin_bit_mask = BIT64(GPIO_NUM_25),
-        .mode = GPIO_MODE_OUTPUT,
-    };
-    gpio_config(&cs_cfg);
+    // gpio_config_t cs_cfg = {
+    //     .pin_bit_mask = BIT64(GPIO_NUM_25),
+    //     .mode = GPIO_MODE_OUTPUT,
+    // };
+    // gpio_config(&cs_cfg);
 
-    spi_transaction_t t = {
-        .length = 8,
-        .tx_data = {0x80 | 0x34},
-        .rxlength = 8,
-        .flags = SPI_TRANS_USE_TXDATA | SPI_TRANS_USE_RXDATA,
-    };
+    // spi_transaction_t t = {
+    //     .length = 8,
+    //     .tx_data = {0x80 | 0x34},
+    //     .rxlength = 8,
+    //     .flags = SPI_TRANS_USE_TXDATA | SPI_TRANS_USE_RXDATA,
+    // };
 
-    esp_err_t err;
-    err = spi_device_acquire_bus(spi, portMAX_DELAY);
-    if(err != ESP_OK) {
-        ESP_LOGE(TAG, "Failure acquiring bus", esp_err_to_name(err));
-    }
+    // esp_err_t err;
+    // err = spi_device_acquire_bus(spi, portMAX_DELAY);
+    // if(err != ESP_OK) {
+    //     ESP_LOGE(TAG, "Failure acquiring bus", esp_err_to_name(err));
+    // }
     while(1)
     {
         // err = spi_device_polling_transmit(spi, &t);
-        err = spi_device_transmit(spi, &t);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Failure reading register: %s", esp_err_to_name(err));
-        } else {
-            ESP_LOGI(TAG, "Register value: (%d, %d, %d, %d)", t.rx_data[0], t.rx_data[1], t.rx_data[2], t.rx_data[3]);
-        }
+        // err = spi_device_transmit(spi, &t);
+        // if (err != ESP_OK) {
+        //     ESP_LOGE(TAG, "Failure reading register: %s", esp_err_to_name(err));
+        // } else {
+        //     ESP_LOGI(TAG, "Register value: (%d, %d, %d, %d)", t.rx_data[0], t.rx_data[1], t.rx_data[2], t.rx_data[3]);
+        // }
         
-        vTaskDelay(pdMS_TO_TICKS(500));
+        // vTaskDelay(pdMS_TO_TICKS(500));
 
-        // vTaskDelay(pdMS_TO_TICKS(10));
+        vTaskDelay(pdMS_TO_TICKS(10));
         lv_task_handler();
         // st7789_flush(50, 210, 0, 160, color_buf);
         // draw(0, 20, 0, 100, 0x8000);
