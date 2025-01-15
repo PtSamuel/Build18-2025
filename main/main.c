@@ -24,6 +24,8 @@
 
 static QueueHandle_t uart_queue;
 static uint8_t uart_buffer[1024];
+static uint8_t sd_card_buffer[1024];
+SemaphoreHandle_t sd_card_write_protect;
 
 extern lv_disp_drv_t disp_drv;
 
@@ -44,6 +46,22 @@ void draw(int x1, int x2, int y1, int y2, uint16_t color) {
     // free(color_buf);
 }
 
+static void sd_card_task(void *pvParameters) {
+    uart_event_t event;
+    while (1)
+    {
+        if(pdTRUE == xSemaphoreTake(sd_card_write_protect, portMAX_DELAY))
+        {
+            ESP_LOGI(TAG, "Receiving SD card buffer: %s", sd_card_buffer);
+        }
+    }
+    vTaskDelete(NULL);
+}
+
+// void parse_nmea_0813(const char *str, int length) {
+    
+// }
+
 static void uart_event_task(void *pvParameters) {
     uart_event_t event;
     while (1)
@@ -52,9 +70,23 @@ static void uart_event_task(void *pvParameters) {
         {
             switch (event.type) {
             case UART_PATTERN_DET:
-                uart_read_bytes(UART_NUM_2, uart_buffer, event.size, portMAX_DELAY);
-                ESP_LOGI(TAG, "[DET (%d)] %s", event.size, uart_buffer);
-                break;
+                int pos = uart_pattern_pop_pos(UART_NUM_2);
+                if(pos != -1) {
+                    int read_length = uart_read_bytes(UART_NUM_2, uart_buffer, pos + 1, portMAX_DELAY);
+                    read_length = MIN(sizeof(uart_buffer), read_length);
+                    uart_buffer[read_length] = '\0';
+                    // parse_nmea_0813(uart_buffer, read_length);
+                    const char* message_id = (const char*) &uart_buffer[3];
+                    if(strstr(message_id, "RMC") || strstr(message_id, "GGA")) {
+                        ESP_LOGI(TAG, "[DET (%d) (%d)] %s", event.size, read_length, uart_buffer);
+                        memcpy(sd_card_buffer, uart_buffer, read_length + 1);
+                        xSemaphoreGive(sd_card_write_protect);
+                    }
+                    break;
+                } else {
+                    ESP_LOGW(TAG, "Pattern Queue Size too small");
+                    uart_flush_input(UART_NUM_2);
+                }
             case UART_DATA:
                 int read_length = uart_read_bytes(UART_NUM_2, uart_buffer, event.size, portMAX_DELAY);
                 read_length = MIN(sizeof(uart_buffer), read_length);
@@ -194,6 +226,8 @@ void app_main(void)
 
     lv_demo_widgets();
 
+    sd_card_write_protect = xSemaphoreCreateBinary();
+
     uart_config_t uart_config = {
         .baud_rate = 9600, 
         .data_bits = UART_DATA_8_BITS, 
@@ -213,9 +247,11 @@ void app_main(void)
     // };
     // ESP_ERROR_CHECK(uart_intr_config(UART_NUM_2, &uart_intr));
     // ESP_ERROR_CHECK(uart_enable_rx_intr(UART_NUM_2));
-    // uart_enable_pattern_det_baud_intr(UART_NUM_2, '\n', 1, 9, 0, 0);
-    // uart_pattern_queue_reset(UART_NUM_2, 128);
-    // uart_flush(UART_NUM_2);
+    uart_enable_pattern_det_baud_intr(UART_NUM_2, '\n', 1, 9, 0, 0);
+    uart_pattern_queue_reset(UART_NUM_2, 128);
+    uart_flush(UART_NUM_2);
+
+    xTaskCreatePinnedToCore(sd_card_task, "uart", 4096, NULL, 3, NULL, 0);
     
     // esp_err_t ret;
     // esp_vfs_fat_sdmmc_mount_config_t mount_config = {
