@@ -32,15 +32,15 @@ static void uart_event_task(void *pvParameters) {
                     // parse_nmea_0813(uart_buffer, read_length);
                     const char* message_id = (const char*) &uart_buffer[3];
                     if(strstr(message_id, "RMC") || strstr(message_id, "GGA")) {
-                        ESP_LOGI(TAG, "[DET (%d) (%d)] %s", event.size, read_length, uart_buffer);
+                        ESP_LOGI(TAG, "[DET (%d)] %s", event.size, read_length, uart_buffer);
                         memcpy(sd_card_get_buffer(), uart_buffer, read_length + 1);
                         sd_card_set_write_ready();
                     }
-                    break;
                 } else {
                     ESP_LOGW(TAG, "Pattern Queue Size too small");
                     uart_flush_input(UART_NUM_2);
                 }
+                break;
             case UART_DATA:
                 int read_length = uart_read_bytes(UART_NUM_2, uart_buffer, event.size, portMAX_DELAY);
                 read_length = MIN(sizeof(uart_buffer), read_length);
