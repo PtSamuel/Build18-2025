@@ -284,13 +284,6 @@ void app_main(void)
     uart_set_pin(UART_NUM_2, GPIO_NUM_17, GPIO_NUM_16, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
     xTaskCreatePinnedToCore(uart_event_task, "uart", 4096, NULL, 3, NULL, 1);
 
-    // uart_intr_config_t uart_intr = {
-    //     .intr_enable_mask = UART_PATTERN_DET,
-    //     .rxfifo_full_thresh = 100,
-    //     .rx_timeout_thresh = 10,
-    // };
-    // ESP_ERROR_CHECK(uart_intr_config(UART_NUM_2, &uart_intr));
-    // ESP_ERROR_CHECK(uart_enable_rx_intr(UART_NUM_2));
     uart_enable_pattern_det_baud_intr(UART_NUM_2, '\n', 1, 9, 0, 0);
     uart_pattern_queue_reset(UART_NUM_2, 128);
     uart_flush(UART_NUM_2);
@@ -359,11 +352,9 @@ void app_main(void)
     // spi_device_interface_config_t devcfg = {
     //     .command_bits = 0,
     //     .clock_speed_hz = 1 * 1000 * 1000,     // Clock out at 1 MHz
-    //     .mode = 3,                              // SPI mode 0
+    //     .mode = 0,                              // SPI mode 0
     //     .spics_io_num = GPIO_NUM_25,             // CS pin
-    //     .queue_size = 1,       
-    //     // .pre_cb = cs_high,
-    //     // .post_cb = cs_low,              
+    //     .queue_size = 1,                
     // };
     // //Initialize the SPI bus
     // ret = spi_bus_initialize(SPI3_HOST, &buscfg, SPI_DMA_CH_AUTO);
@@ -372,15 +363,10 @@ void app_main(void)
     // ret = spi_bus_add_device(SPI3_HOST, &devcfg, &spi);
     // ESP_ERROR_CHECK(ret);
 
-    // gpio_config_t cs_cfg = {
-    //     .pin_bit_mask = BIT64(GPIO_NUM_25),
-    //     .mode = GPIO_MODE_OUTPUT,
-    // };
-    // gpio_config(&cs_cfg);
 
     // spi_transaction_t t = {
     //     .length = 8,
-    //     .tx_data = {0x80 | 0x34},
+    //     .tx_data = {0x80 | 0x19},
     //     .rxlength = 8,
     //     .flags = SPI_TRANS_USE_TXDATA | SPI_TRANS_USE_RXDATA,
     // };
@@ -390,6 +376,7 @@ void app_main(void)
     // if(err != ESP_OK) {
     //     ESP_LOGE(TAG, "Failure acquiring bus", esp_err_to_name(err));
     // }
+
     while(1)
     {
         // err = spi_device_polling_transmit(spi, &t);
