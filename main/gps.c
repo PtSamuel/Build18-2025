@@ -1,4 +1,5 @@
 #include "gps.h"
+#include "sd_card.h"
 
 #include "esp_log.h"
 #include "driver/gpio.h"
@@ -12,9 +13,6 @@
 
 static QueueHandle_t uart_queue;
 static uint8_t uart_buffer[1024];
-
-extern uint8_t sd_card_buffer[1024];
-extern SemaphoreHandle_t sd_card_write_protect;
 
 static const char *TAG = "GPS";
 
@@ -35,8 +33,8 @@ static void uart_event_task(void *pvParameters) {
                     const char* message_id = (const char*) &uart_buffer[3];
                     if(strstr(message_id, "RMC") || strstr(message_id, "GGA")) {
                         ESP_LOGI(TAG, "[DET (%d) (%d)] %s", event.size, read_length, uart_buffer);
-                        memcpy(sd_card_buffer, uart_buffer, read_length + 1);
-                        xSemaphoreGive(sd_card_write_protect);
+                        memcpy(sd_card_get_buffer(), uart_buffer, read_length + 1);
+                        sd_card_set_write_ready();
                     }
                     break;
                 } else {

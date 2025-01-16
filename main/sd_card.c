@@ -170,3 +170,11 @@ void sd_card_init() {
 
     xTaskCreatePinnedToCore(sd_card_task, "sd_card", 4096, NULL, 3, NULL, 0);
 }
+
+uint8_t* sd_card_get_buffer() {
+    return sd_card_buffer;
+}
+
+void sd_card_set_write_ready() {
+    xSemaphoreGive(sd_card_write_protect);
+}
