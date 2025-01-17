@@ -4,9 +4,15 @@
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
 
+#include "esp_timer.h"
+
 static const char *TAG = "IMU";
 
-static spi_device_handle_t spi;
+static spi_device_handle_t spi; 
+
+static void imu_read_interrupt() {
+    gpio_set_level(GPIO_NUM_2, !gpio_get_level(GPIO_NUM_2));
+}
 
 void imu_init() {
     esp_err_t ret;
@@ -51,6 +57,29 @@ void imu_init() {
     spi_device_release_bus(spi);
 
     vTaskDelay(100);
+
+    gpio_config_t led_gpio_cfg = 
+    {
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE, 
+        .mode = GPIO_MODE_OUTPUT,
+        .intr_type = GPIO_INTR_DISABLE, 
+        .pin_bit_mask = BIT(GPIO_NUM_2),
+    };
+    gpio_config(&led_gpio_cfg);
+
+    static uint32_t tick_inc_period_ms = 2;
+    const esp_timer_create_args_t periodic_timer_args = {
+        .callback = imu_read_interrupt,
+        .name = "imu_read_interrupt",
+        .arg = &tick_inc_period_ms,
+        .dispatch_method = ESP_TIMER_ISR,
+        .skip_unhandled_events = true,
+    };
+
+    esp_timer_handle_t periodic_timer;
+    ESP_ERROR_CHECK(esp_timer_create(&periodic_timer_args, &periodic_timer));
+    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, tick_inc_period_ms * 1000));
 }
 
 static void swap_16_bit_bytes(void *arr, int size) {
@@ -86,10 +115,8 @@ void imu_read() {
         ESP_LOGE(TAG, "Failure reading register: %s", esp_err_to_name(err));
     } else {
         swap_16_bit_bytes(rx_buf, sizeof(rx_buf));
-        uint16_t *registers = rx_buf;
         int16_t *registers_signed = rx_buf;
-        ESP_LOGI(TAG, "Register values: (%x/%d, %x/%d, %x/%d, %x/%d, %x/%d, %x/%d, %x/%d)", registers[0], registers_signed[0], registers[1], registers_signed[1], registers[2], registers_signed[2], registers[3], registers_signed[3], registers[4], registers_signed[4], registers[5], registers_signed[5], registers[6], registers_signed[6]); 
-        // ESP_LOGI(TAG, "Register value: (%d, %d, %d, %d)", t.rx_data[0], t.rx_data[1], t.rx_data[2], t.rx_data[3]);
+        ESP_LOGI(TAG, "Register values: (%d, %d, %d, %d, %d, %d, %d)", registers_signed[0], registers_signed[1], registers_signed[2], registers_signed[3], registers_signed[4], registers_signed[5], registers_signed[6]); 
     }
 
     spi_device_release_bus(spi);
