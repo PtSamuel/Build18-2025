@@ -23,8 +23,10 @@ void imu_init() {
 
     spi_device_interface_config_t devcfg = {
         .command_bits = 0,
-        .clock_speed_hz = 1 * 1000 * 1000,     // Clock out at 1 MHz
+        .address_bits = 8,
+        .dummy_bits = 0,
         .mode = 0,                              // SPI mode 0
+        .clock_speed_hz = 1 * 1000 * 1000,     // Clock out at 1 MHz
         .spics_io_num = GPIO_NUM_25,             // CS pin
         .queue_size = 1,                
     };
@@ -34,10 +36,10 @@ void imu_init() {
 
 void imu_read() {
     spi_transaction_t t = {
+        .addr = 0x80 | 0x13,
         .length = 8,
-        .tx_data = {0x80 | 0x19},
         .rxlength = 8,
-        .flags = SPI_TRANS_USE_TXDATA | SPI_TRANS_USE_RXDATA,
+        .flags = SPI_TRANS_USE_RXDATA,
     };
 
     esp_err_t err;

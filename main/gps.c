@@ -32,7 +32,7 @@ static void uart_event_task(void *pvParameters) {
                     // parse_nmea_0813(uart_buffer, read_length);
                     const char* message_id = (const char*) &uart_buffer[3];
                     if(strstr(message_id, "RMC") || strstr(message_id, "GGA")) {
-                        ESP_LOGI(TAG, "[DET (%d)] %s", event.size, read_length, uart_buffer);
+                        // ESP_LOGI(TAG, "[DET (%d)] %s", event.size, read_length, uart_buffer);
                         memcpy(sd_card_get_buffer(), uart_buffer, read_length + 1);
                         sd_card_set_write_ready();
                     }
