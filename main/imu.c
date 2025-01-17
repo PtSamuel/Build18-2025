@@ -5,13 +5,27 @@
 #include "driver/spi_master.h"
 
 #include "esp_timer.h"
+#include "math.h"
+
+#define G (9.81)
+#define ACCEL_HALF_RANGE (16 * G)
+#define ACCEL_FULL_RANGE (2 * ACCEL_HALF_RANGE)
+
+#define DEGREE_TO_RADIAN (M_PI / 180.0)
+#define GYRO_HALF_RANGE (2000 * DEGREE_TO_RADIAN)
+#define GYRO_FULL_RANGE (2 * GYRO_HALF_RANGE)
+
+#define INT16_RANGE ((double) ((int) INT16_MAX - (int) INT16_MIN))
+#define INT16_TO_MINUS_PLUS_ONE(x) ((double) ((int) x - (int) (INT16_MIN)) / INT16_RANGE) 
+
+#define GET_ACCEL(x) (-ACCEL_HALF_RANGE + INT16_TO_MINUS_PLUS_ONE(x) * ACCEL_FULL_RANGE)
+#define GET_GYRO(x) (-GYRO_HALF_RANGE + INT16_TO_MINUS_PLUS_ONE(x) * GYRO_FULL_RANGE)
 
 static const char *TAG = "IMU";
 
 static spi_device_handle_t spi; 
 
 static uint8_t rx_buf[14];
-
 
 static void swap_16_bit_bytes(void *arr, int size) {
     uint8_t *data = arr;
@@ -23,23 +37,14 @@ static void swap_16_bit_bytes(void *arr, int size) {
     }
 }
 
-static void spi_result_task(void *pvParameters) {
-
-    spi_transaction_t *t;
-    for(;;) {
-        esp_err_t err = spi_device_get_trans_result(spi, &t, portMAX_DELAY);
-        if(err != ESP_OK) {
-            ESP_LOGE(TAG, "spi_device_get_trans_result failed: %s", esp_err_to_name(err));
-            continue;
-        }
-        swap_16_bit_bytes(t->rx_buffer, sizeof(rx_buf));
-        int16_t *registers_signed = t->rx_buffer;
-        ESP_LOGI(TAG, "Register values: (%d, %d, %d, %d, %d, %d, %d)", registers_signed[0], registers_signed[1], registers_signed[2], registers_signed[3], registers_signed[4], registers_signed[5], registers_signed[6]);
-    }
-}
-
 static void imu_read_interrupt() {
-    gpio_set_level(GPIO_NUM_2, !gpio_get_level(GPIO_NUM_2));
+    static bool led_status = 0;
+    if(led_status) {
+        gpio_set_level(GPIO_NUM_2, 1);
+    } else {
+        gpio_set_level(GPIO_NUM_2, 0);
+    }
+    led_status = !led_status;
 
     spi_transaction_t t = {
         .addr = 0x80 | 0x1D,
@@ -48,7 +53,26 @@ static void imu_read_interrupt() {
         .rx_buffer = rx_buf,
     };
 
-    spi_device_queue_trans(spi, &t, portMAX_DELAY);
+    esp_err_t err = spi_device_transmit(spi, &t);
+
+    if(err != ESP_OK) {
+        // ESP_LOGE(TAG, "spi_device_get_trans_result failed: %s", esp_err_to_name(err));
+        return;
+    }
+    swap_16_bit_bytes(rx_buf, sizeof(rx_buf));
+    int16_t *registers_signed = rx_buf;
+
+    float temperature = registers_signed[0] / 132.48f + 25.0f;
+    double accel_x = GET_ACCEL(registers_signed[1]);
+    double accel_y = GET_ACCEL(registers_signed[2]);
+    double accel_z = GET_ACCEL(registers_signed[3]);
+    double gyro_x = GET_GYRO(registers_signed[4]);
+    double gyro_y = GET_GYRO(registers_signed[5]);
+    double gyro_z = GET_GYRO(registers_signed[6]);
+    
+    // ESP_LOGI(TAG, "Register values: (%d, %d, %d, %d, %d, %d, %d)", registers_signed[0], registers_signed[1], registers_signed[2], registers_signed[3], registers_signed[4], registers_signed[5], registers_signed[6]);
+    // ESP_LOGI(TAG, "%f %d %f", INT16_RANGE, registers_signed[1], INT16_TO_MINUS_PLUS_ONE(registers_signed[1]));
+    ESP_LOGI(TAG, "Register values: (%f, %f, %f, %f, %f, %f, %f)", temperature, accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z);
 }
 
 void imu_init() {
@@ -103,8 +127,6 @@ void imu_init() {
         .pin_bit_mask = BIT(GPIO_NUM_2),
     };
     gpio_config(&led_gpio_cfg);
-
-    xTaskCreatePinnedToCore(spi_result_task, "spi_result_task", 4096, NULL, 3, NULL, 1);
 
     static uint32_t tick_inc_period_ms = 500;
     const esp_timer_create_args_t periodic_timer_args = {
