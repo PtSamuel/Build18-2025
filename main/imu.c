@@ -10,8 +10,23 @@ static const char *TAG = "IMU";
 
 static spi_device_handle_t spi; 
 
+static void spi_callback(spi_transaction_t *trans) {
+    spi_transaction_t *t;
+    spi_device_get_trans_result(spi, &t, 0);
+}
+
 static void imu_read_interrupt() {
     gpio_set_level(GPIO_NUM_2, !gpio_get_level(GPIO_NUM_2));
+
+    uint8_t rx_buf[14];
+    spi_transaction_t t = {
+        .addr = 0x80 | 0x1D,
+        .length = 8,
+        .rxlength = 8 * sizeof(rx_buf),
+        .rx_buffer = rx_buf,
+    };
+
+    spi_device_queue_trans(spi, &t, 0);
 }
 
 void imu_init() {
@@ -35,7 +50,8 @@ void imu_init() {
         .clock_speed_hz = 1 * 1000 * 1000,     // Clock out at 1 MHz
         .spics_io_num = GPIO_NUM_25,             // CS pin
         .queue_size = 1,       
-        .flags = SPI_DEVICE_HALFDUPLEX,         
+        .flags = SPI_DEVICE_HALFDUPLEX,        
+        .post_cb = spi_callback, 
     };
     ret = spi_bus_add_device(SPI3_HOST, &devcfg, &spi);
     ESP_ERROR_CHECK(ret);
@@ -54,7 +70,6 @@ void imu_init() {
     };
 
     err = spi_device_polling_transmit(spi, &t);
-    spi_device_release_bus(spi);
 
     vTaskDelay(100);
 
@@ -104,10 +119,6 @@ void imu_read() {
     };
 
     esp_err_t err;
-    err = spi_device_acquire_bus(spi, portMAX_DELAY);
-    if(err != ESP_OK) {
-        ESP_LOGE(TAG, "Failure acquiring bus", esp_err_to_name(err));
-    }
 
     err = spi_device_polling_transmit(spi, &t);
     // err = spi_device_transmit(spi, &t);
@@ -119,5 +130,4 @@ void imu_read() {
         ESP_LOGI(TAG, "Register values: (%d, %d, %d, %d, %d, %d, %d)", registers_signed[0], registers_signed[1], registers_signed[2], registers_signed[3], registers_signed[4], registers_signed[5], registers_signed[6]); 
     }
 
-    spi_device_release_bus(spi);
 }
