@@ -29,16 +29,34 @@ void imu_init() {
         .clock_speed_hz = 1 * 1000 * 1000,     // Clock out at 1 MHz
         .spics_io_num = GPIO_NUM_25,             // CS pin
         .queue_size = 1,       
-        // .flags = SPI_DEVICE_HALFDUPLEX,         
+        .flags = SPI_DEVICE_HALFDUPLEX,         
     };
     ret = spi_bus_add_device(SPI3_HOST, &devcfg, &spi);
     ESP_ERROR_CHECK(ret);
+
+    esp_err_t err;
+    err = spi_device_acquire_bus(spi, portMAX_DELAY);
+    if(err != ESP_OK) {
+        ESP_LOGE(TAG, "Failure acquiring bus", esp_err_to_name(err));
+    }
+
+    spi_transaction_t t = {
+        .addr = 0x4E,
+        .length = 8 + 8,
+        .tx_buffer = {0x1F},
+        .flags = SPI_TRANS_USE_TXDATA,
+    };
+
+    err = spi_device_polling_transmit(spi, &t);
+    spi_device_release_bus(spi);
+
+    vTaskDelay(100);
 }
 
 void imu_read() {
     uint16_t rx_buf[7];
     spi_transaction_t t = {
-        .addr = 0x80 | 0x13,
+        .addr = 0x80 | 0x26,
         .length = 8,
         // .rxlength = 8 * sizeof(rx_buf) * sizeof(uint16_t),
         .rxlength = 8,
