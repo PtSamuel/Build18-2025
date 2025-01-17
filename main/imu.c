@@ -10,15 +10,37 @@ static const char *TAG = "IMU";
 
 static spi_device_handle_t spi; 
 
-static void spi_callback(spi_transaction_t *trans) {
+static uint8_t rx_buf[14];
+
+
+static void swap_16_bit_bytes(void *arr, int size) {
+    uint8_t *data = arr;
+    int num_elements = size / 2;
+    for(int i = 0; i < num_elements; i++) {
+        uint8_t temp = data[2 * i];
+        data[2 * i] = data[2 * i + 1];
+        data[2 * i + 1] = temp;
+    }
+}
+
+static void spi_result_task(void *pvParameters) {
+
     spi_transaction_t *t;
-    spi_device_get_trans_result(spi, &t, 0);
+    for(;;) {
+        esp_err_t err = spi_device_get_trans_result(spi, &t, portMAX_DELAY);
+        if(err != ESP_OK) {
+            ESP_LOGE(TAG, "spi_device_get_trans_result failed: %s", esp_err_to_name(err));
+            continue;
+        }
+        swap_16_bit_bytes(t->rx_buffer, sizeof(rx_buf));
+        int16_t *registers_signed = t->rx_buffer;
+        ESP_LOGI(TAG, "Register values: (%d, %d, %d, %d, %d, %d, %d)", registers_signed[0], registers_signed[1], registers_signed[2], registers_signed[3], registers_signed[4], registers_signed[5], registers_signed[6]);
+    }
 }
 
 static void imu_read_interrupt() {
     gpio_set_level(GPIO_NUM_2, !gpio_get_level(GPIO_NUM_2));
 
-    uint8_t rx_buf[14];
     spi_transaction_t t = {
         .addr = 0x80 | 0x1D,
         .length = 8,
@@ -26,7 +48,7 @@ static void imu_read_interrupt() {
         .rx_buffer = rx_buf,
     };
 
-    spi_device_queue_trans(spi, &t, 0);
+    spi_device_queue_trans(spi, &t, portMAX_DELAY);
 }
 
 void imu_init() {
@@ -49,9 +71,8 @@ void imu_init() {
         .mode = 0,                              // SPI mode 0
         .clock_speed_hz = 1 * 1000 * 1000,     // Clock out at 1 MHz
         .spics_io_num = GPIO_NUM_25,             // CS pin
-        .queue_size = 1,       
+        .queue_size = 16,       
         .flags = SPI_DEVICE_HALFDUPLEX,        
-        .post_cb = spi_callback, 
     };
     ret = spi_bus_add_device(SPI3_HOST, &devcfg, &spi);
     ESP_ERROR_CHECK(ret);
@@ -83,32 +104,25 @@ void imu_init() {
     };
     gpio_config(&led_gpio_cfg);
 
-    static uint32_t tick_inc_period_ms = 2;
+    xTaskCreatePinnedToCore(spi_result_task, "spi_result_task", 4096, NULL, 3, NULL, 1);
+
+    static uint32_t tick_inc_period_ms = 500;
     const esp_timer_create_args_t periodic_timer_args = {
         .callback = imu_read_interrupt,
         .name = "imu_read_interrupt",
         .arg = &tick_inc_period_ms,
-        .dispatch_method = ESP_TIMER_ISR,
+        .dispatch_method = ESP_TIMER_TASK,
         .skip_unhandled_events = true,
     };
 
     esp_timer_handle_t periodic_timer;
     ESP_ERROR_CHECK(esp_timer_create(&periodic_timer_args, &periodic_timer));
     ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, tick_inc_period_ms * 1000));
-}
 
-static void swap_16_bit_bytes(void *arr, int size) {
-    uint8_t *data = arr;
-    int num_elements = size / 2;
-    for(int i = 0; i < num_elements; i++) {
-        uint8_t temp = data[2 * i];
-        data[2 * i] = data[2 * i + 1];
-        data[2 * i + 1] = temp;
-    }
+
 }
 
 void imu_read() {
-    uint8_t rx_buf[14];
     spi_transaction_t t = {
         .addr = 0x80 | 0x1D,
         .length = 8,
