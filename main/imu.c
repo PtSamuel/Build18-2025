@@ -28,7 +28,8 @@ void imu_init() {
         .mode = 0,                              // SPI mode 0
         .clock_speed_hz = 1 * 1000 * 1000,     // Clock out at 1 MHz
         .spics_io_num = GPIO_NUM_25,             // CS pin
-        .queue_size = 1,                
+        .queue_size = 1,       
+        .flags = SPI_DEVICE_HALFDUPLEX,         
     };
     ret = spi_bus_add_device(SPI3_HOST, &devcfg, &spi);
     ESP_ERROR_CHECK(ret);
@@ -36,7 +37,7 @@ void imu_init() {
 
 void imu_read() {
     spi_transaction_t t = {
-        .addr = 0x80 | 0x13,
+        .addr = 0x80 | 0x1D,
         .length = 8,
         .rxlength = 8,
         .flags = SPI_TRANS_USE_RXDATA,
