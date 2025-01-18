@@ -20,8 +20,15 @@ static const char *TAG = "SD_CARD";
 static char filename[32] = MOUNT_POINT"/log_0.txt";
 static FILE *f;
 
-uint8_t sd_card_buffer[1024];
-SemaphoreHandle_t sd_card_write_protect;
+typedef struct {
+    uint8_t sd_card_buffer[1024];
+    SemaphoreHandle_t sd_card_write_protect;
+    bool inited;
+} sd_card_status_t;
+
+sd_card_status_t sd_card_status = {
+    .inited = false,
+};
 
 static void dump_file(FILE *file)
 {
@@ -129,14 +136,14 @@ static esp_err_t s_example_read_file(const char *path)
 static void sd_card_task(void *pvParameters) {
     while (1)
     {
-        if(pdTRUE == xSemaphoreTake(sd_card_write_protect, portMAX_DELAY))
+        if(pdTRUE == xSemaphoreTake(sd_card_status.sd_card_write_protect, portMAX_DELAY))
         {
-            ESP_LOGI(TAG, "Receiving SD card buffer: %s", sd_card_buffer);
+            ESP_LOGI(TAG, "Receiving SD card buffer: %s", sd_card_status.sd_card_buffer);
             FILE *f = fopen(filename, "a");
             if (f == NULL) {
                 ESP_LOGE(TAG, "Failed to open file");
             }
-            fprintf(f, (char*)sd_card_buffer);
+            fprintf(f, (char*)sd_card_status.sd_card_buffer);
             fclose(f);
         }
     }
@@ -145,7 +152,7 @@ static void sd_card_task(void *pvParameters) {
 
 void sd_card_init() {
     
-    sd_card_write_protect = xSemaphoreCreateBinary();
+    sd_card_status.sd_card_write_protect = xSemaphoreCreateBinary();
     
     esp_err_t ret;
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {
@@ -199,12 +206,23 @@ void sd_card_init() {
     ESP_ERROR_CHECK(create_file());
 
     xTaskCreatePinnedToCore(sd_card_task, "sd_card", 4096, NULL, 3, NULL, 0);
+
+    sd_card_status.inited = true;
+}
+
+bool sd_card_inited() {
+    return sd_card_status.inited;
 }
 
 uint8_t* sd_card_get_buffer() {
-    return sd_card_buffer;
+    if(sd_card_status.inited) {
+        return sd_card_status.sd_card_buffer;
+    }
+    return NULL;
 }
 
 void sd_card_set_write_ready() {
-    xSemaphoreGive(sd_card_write_protect);
+    if(sd_card_status.inited) {
+        xSemaphoreGive(sd_card_status.sd_card_write_protect);
+    }
 }

@@ -15,12 +15,14 @@ static const char* TAG = "main";
 
 void app_main(void)
 {
-    lcd_init();
+
     // vTaskDelay(pdMS_TO_TICKS(10000));
     // sd_card_init();
     // sd_card_dump_files();
-    // gps_init();
+
+    gps_init();
     imu_init();
+    lcd_init();
     
     // while(1)
     // {

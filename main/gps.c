@@ -29,12 +29,14 @@ static void uart_event_task(void *pvParameters) {
                     int read_length = uart_read_bytes(UART_NUM_2, uart_buffer, pos + 1, portMAX_DELAY);
                     read_length = MIN(sizeof(uart_buffer), read_length);
                     uart_buffer[read_length] = '\0';
-                    // parse_nmea_0813(uart_buffer, read_length);
+                    // ESP_LOGI(TAG, "%s", uart_buffer);
                     const char* message_id = (const char*) &uart_buffer[3];
                     if(strstr(message_id, "RMC") || strstr(message_id, "GGA")) {
                         // ESP_LOGI(TAG, "[DET (%d)] %s", event.size, read_length, uart_buffer);
-                        memcpy(sd_card_get_buffer(), uart_buffer, read_length + 1);
-                        sd_card_set_write_ready();
+                        if(sd_card_inited()) {
+                            memcpy(sd_card_get_buffer(), uart_buffer, read_length + 1);
+                            sd_card_set_write_ready();
+                        }
                     }
                 } else {
                     ESP_LOGW(TAG, "Pattern Queue Size too small");
@@ -63,7 +65,7 @@ static void uart_event_task(void *pvParameters) {
                 break;
             //Event of UART RX break detected
             case UART_BREAK:
-                ESP_LOGI(TAG, "uart rx break");
+                // ESP_LOGI(TAG, "uart rx break");
                 break;
             //Event of UART parity check error
             case UART_PARITY_ERR:
