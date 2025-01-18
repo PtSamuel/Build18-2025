@@ -1,3 +1,4 @@
+#include "imu.h"
 #include "gps.h"
 #include "lcd.h"
 
@@ -23,6 +24,14 @@
 #define GET_GYRO(x) (-GYRO_HALF_RANGE + INT16_TO_MINUS_PLUS_ONE(x) * GYRO_FULL_RANGE)
 
 static const char *TAG = "IMU";
+
+typedef struct {
+    volatile float temperature;
+    volatile double accel[3];
+    volatile double gyro[3];
+} imu_status_t;
+
+static imu_status_t imu_status;
 
 static spi_device_handle_t spi; 
 
@@ -72,11 +81,35 @@ static void imu_read_interrupt() {
     double gyro_x = GET_GYRO(registers_signed[4]);
     double gyro_y = GET_GYRO(registers_signed[5]);
     double gyro_z = GET_GYRO(registers_signed[6]);
+
+    imu_status.temperature = temperature;
+    imu_status.gyro[0] = gyro_x;
+    imu_status.gyro[1] = gyro_y;
+    imu_status.gyro[2] = gyro_z;
+    imu_status.accel[0] = accel_x;
+    imu_status.accel[1] = accel_y;
+    imu_status.accel[2] = accel_z;
     
     // ESP_LOGI(TAG, "Register values: (%d, %d, %d, %d, %d, %d, %d)", registers_signed[0], registers_signed[1], registers_signed[2], registers_signed[3], registers_signed[4], registers_signed[5], registers_signed[6]);
     // ESP_LOGI(TAG, "%f %d %f", INT16_RANGE, registers_signed[1], INT16_TO_MINUS_PLUS_ONE(registers_signed[1]));
     // ESP_LOGI(TAG, "Register values: (%f, %f, %f, %f, %f, %f, %f)", temperature, accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z);
-    lcd_set_gyro(gyro_x, gyro_x, gyro_z);
+    // lcd_set_gyro(gyro_x, gyro_x, gyro_z);
+}
+
+float imu_get_temperature() {
+    return imu_status.temperature;
+}
+
+double imu_get_gyro(axis_t axis) {
+    if(axis > AXIS_Z)
+        return 0.0;
+    return imu_status.gyro[axis];
+}
+
+double imu_get_accel(axis_t axis) {
+    if(axis > AXIS_Z)
+        return 0.0;
+    return imu_status.accel[axis];
 }
 
 void imu_init() {

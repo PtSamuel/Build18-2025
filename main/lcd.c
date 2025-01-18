@@ -1,4 +1,5 @@
 #include "lcd.h"
+#include "imu.h"
 
 #include "lvgl.h"
 #include "lv_port.h"
@@ -37,12 +38,12 @@ typedef struct {
     lv_obj_t* label_lat_long;
     lv_obj_t* label_velocity;
     lv_obj_t* label_altitude;
+    lv_obj_t* label_temperature;
     lv_obj_t* label_accel;
     lv_obj_t* label_gyro;
     float latitude;
     float longitude;
-    float accel[3];
-    float gyro[3];
+    
 } lcd_status_t;
 
 static lcd_status_t lcd_status;
@@ -101,12 +102,19 @@ void create_interface() {
     lv_label_set_text(lcd_status.label_altitude, "Altitude: 00.00");
     lv_obj_align_to(lcd_status.label_altitude, lcd_status.label_velocity, LV_ALIGN_OUT_BOTTOM_LEFT, 0,
                     5);
+
+    // Create Altitude label
+    lcd_status.label_temperature = lv_label_create(lv_win_get_content(win));
+    lv_obj_add_style(lcd_status.label_temperature, &lcd_status.style_number, 0);
+    lv_label_set_text(lcd_status.label_temperature, "Temperature: 25.00 C");
+    lv_obj_align_to(lcd_status.label_temperature, lcd_status.label_altitude, LV_ALIGN_OUT_BOTTOM_LEFT, 0,
+                    5);
     
     // Create Accel label
     lcd_status.label_accel = lv_label_create(lv_win_get_content(win));
     lv_obj_add_style(lcd_status.label_accel, &lcd_status.style_number, 0);
     lv_label_set_text(lcd_status.label_accel, "Accel: 00.00, 00.00, 00.00");
-    lv_obj_align_to(lcd_status.label_accel, lcd_status.label_altitude, LV_ALIGN_OUT_BOTTOM_LEFT, 0,
+    lv_obj_align_to(lcd_status.label_accel, lcd_status.label_temperature, LV_ALIGN_OUT_BOTTOM_LEFT, 0,
                     5);
     
     // Create Altitude label
@@ -119,26 +127,26 @@ void create_interface() {
     ESP_LOGI(TAG, "Interface created.");
 }
 
-
-void lcd_set_latitude(float x) {
-
-}
-void lcd_set_longitude(float y) {
-
-}
-void lcd_set_accel(float x, float y, float z) {
-
-}
-void lcd_set_gyro(float x, float y, float z) {
-    lcd_status.gyro[0] = x;
-    lcd_status.gyro[1] = y;
-    lcd_status.gyro[2] = z;
-}
-
 static void lcd_update() {
+
+    float gyro_x = imu_get_gyro(AXIS_X);
+    float gyro_y = imu_get_gyro(AXIS_Y);
+    float gyro_z = imu_get_gyro(AXIS_Z);
+    float accel_x = imu_get_accel(AXIS_X);
+    float accel_y = imu_get_accel(AXIS_Y);
+    float accel_z = imu_get_accel(AXIS_Z);
+
     char buf[32];
-    snprintf(buf, sizeof(buf), "Gyro: %7.3f,%7.3f,%7.3f", lcd_status.gyro[0], lcd_status.gyro[1], lcd_status.gyro[2]);
+    
+    snprintf(buf, sizeof(buf), "Temperature: %5.2f C", imu_get_temperature());
+    lv_label_set_text(lcd_status.label_temperature, buf);
+    
+    snprintf(buf, sizeof(buf), "Accel: %7.3f,%7.3f,%7.3f", accel_x, accel_y, accel_z);
+    lv_label_set_text(lcd_status.label_accel, buf);
+    
+    snprintf(buf, sizeof(buf), "Gyro: %7.3f,%7.3f,%7.3f", gyro_x, gyro_y, gyro_z);
     lv_label_set_text(lcd_status.label_gyro, buf);
+    
     lv_task_handler();
 }
 
