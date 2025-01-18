@@ -1,5 +1,6 @@
 #include "lcd.h"
 #include "imu.h"
+#include "gps.h"
 
 #include "lvgl.h"
 #include "lv_port.h"
@@ -129,31 +130,56 @@ void create_interface() {
 
 static void lcd_update() {
 
-    for(;;) {
+    gps_parse_result_t *result = gps_get_parse_result();
 
-        float gyro_x = imu_get_gyro(AXIS_X);
-        float gyro_y = imu_get_gyro(AXIS_Y);
-        float gyro_z = imu_get_gyro(AXIS_Z);
-        float accel_x = imu_get_accel(AXIS_X);
-        float accel_y = imu_get_accel(AXIS_Y);
-        float accel_z = imu_get_accel(AXIS_Z);
+    float gyro_x = imu_get_gyro(AXIS_X);
+    float gyro_y = imu_get_gyro(AXIS_Y);
+    float gyro_z = imu_get_gyro(AXIS_Z);
+    float accel_x = imu_get_accel(AXIS_X);
+    float accel_y = imu_get_accel(AXIS_Y);
+    float accel_z = imu_get_accel(AXIS_Z);
 
-        char buf[32];
-        
-        snprintf(buf, sizeof(buf), "Temperature: %5.2f C", imu_get_temperature());
-        lv_label_set_text(lcd_status.label_temperature, buf);
-        
-        snprintf(buf, sizeof(buf), "Accel: %7.3f,%7.3f,%7.3f", accel_x, accel_y, accel_z);
-        lv_label_set_text(lcd_status.label_accel, buf);
-        
-        snprintf(buf, sizeof(buf), "Gyro: %7.3f,%7.3f,%7.3f", gyro_x, gyro_y, gyro_z);
-        lv_label_set_text(lcd_status.label_gyro, buf);
-        
-        lv_task_handler();
-        vTaskDelay(pdMS_TO_TICKS(lcd_update_period));
+    char buf[32];
+    
+    if(result->time_valid) {
+        snprintf(buf, sizeof(buf), "Time: %c%c:%c%c:%c%c", 
+            result->hour[0], result->hour[1],
+            result->minute[0], result->minute[1],
+            result->second[0], result->second[1]
+        );
+    } else {
+        snprintf(buf, sizeof(buf), "Time: NaN::NaN::NaN");
 
-        ESP_LOGI(TAG, "update");
     }
+    lv_label_set_text(lcd_status.label_time, buf);
+
+    if(result->lat_long_valid) {
+        snprintf(buf, sizeof(buf), "Lat-Long (%d): %f %c,%f %c", 
+            result->num_satellites,
+            result->latitude, result->latitude_ns,
+            result->longitude, result->longitude_ew
+        );
+    } else {
+        snprintf(buf, sizeof(buf), "Lat-Long: NaN,NaN");
+    }
+    lv_label_set_text(lcd_status.label_lat_long, buf);
+
+    snprintf(buf, sizeof(buf), "Altitude: %f %c", 
+        result->altitude,
+        result->altitude_unit
+    );
+    lv_label_set_text(lcd_status.label_altitude, buf);
+    
+    snprintf(buf, sizeof(buf), "Temperature: %5.2f C", imu_get_temperature());
+    lv_label_set_text(lcd_status.label_temperature, buf);
+    
+    snprintf(buf, sizeof(buf), "Accel: %7.3f,%7.3f,%7.3f", accel_x, accel_y, accel_z);
+    lv_label_set_text(lcd_status.label_accel, buf);
+    
+    snprintf(buf, sizeof(buf), "Gyro: %7.3f,%7.3f,%7.3f", gyro_x, gyro_y, gyro_z);
+    lv_label_set_text(lcd_status.label_gyro, buf);
+    
+    lv_task_handler();
 }
 
 void lcd_init() {
@@ -182,16 +208,14 @@ void lcd_init() {
 
     create_interface();
 
-    // const esp_timer_create_args_t periodic_timer_args = {
-    //     .callback = lcd_update,
-    //     .name = "lcd_update",
-    //     .arg = &lcd_update_period,
-    //     .dispatch_method = ESP_TIMER_TASK,
-    //     .skip_unhandled_events = true,
-    // };
-    // esp_timer_handle_t periodic_timer;
-    // ESP_ERROR_CHECK(esp_timer_create(&periodic_timer_args, &periodic_timer));
-    // ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, lcd_update_period * 1000));
-
-    xTaskCreatePinnedToCore(lcd_update, "uart", 4096, NULL, 3, NULL, 1);
+    const esp_timer_create_args_t periodic_timer_args = {
+        .callback = lcd_update,
+        .name = "lcd_update",
+        .arg = &lcd_update_period,
+        .dispatch_method = ESP_TIMER_TASK,
+        .skip_unhandled_events = true,
+    };
+    esp_timer_handle_t periodic_timer;
+    ESP_ERROR_CHECK(esp_timer_create(&periodic_timer_args, &periodic_timer));
+    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, lcd_update_period * 1000));
 }
