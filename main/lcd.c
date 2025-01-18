@@ -27,7 +27,8 @@ void draw(int x1, int x2, int y1, int y2, uint16_t color) {
 }
 
 typedef struct {
-    lv_style_t style_text;
+    lv_style_t style_title;
+    lv_style_t style_number;
     lv_obj_t* label_status;
     lv_obj_t* label_desc;
     lv_obj_t* label_time;
@@ -50,12 +51,16 @@ void create_interface() {
 
     lv_theme_default_init(NULL, lv_palette_main(LV_PALETTE_BLUE), lv_palette_main(LV_PALETTE_RED), LV_THEME_DEFAULT_DARK, &lv_font_montserrat_20);
 
-    lv_style_init(&lcd_status.style_text);
-    lv_style_set_text_font(&lcd_status.style_text, &lv_font_montserrat_20);
+    lv_style_init(&lcd_status.style_title);
+    // lv_style_set_text_font(&lcd_status.style_title, &lv_font_montserrat_20);
+    lv_style_set_text_font(&lcd_status.style_title, &lv_font_unscii_16);
+
+    lv_style_init(&lcd_status.style_number);
+    lv_style_set_text_font(&lcd_status.style_number, &lv_font_unscii_8);
 
     // Create Status label
     lcd_status.label_status = lv_label_create(lv_scr_act());
-    lv_obj_add_style(lcd_status.label_status, &lcd_status.style_text, 0);
+    lv_obj_add_style(lcd_status.label_status, &lcd_status.style_title, 0);
     lv_label_set_text(lcd_status.label_status, "Status: Normal");
     lv_obj_align(lcd_status.label_status, LV_ALIGN_TOP_LEFT, 10, 10);
 
@@ -94,12 +99,14 @@ void create_interface() {
     
     // Create Accel label
     lcd_status.label_accel = lv_label_create(lv_scr_act());
+    lv_obj_add_style(lcd_status.label_accel, &lcd_status.style_number, 0);
     lv_label_set_text(lcd_status.label_accel, "Accel: 00.00, 00.00, 00.00");
     lv_obj_align_to(lcd_status.label_accel, lcd_status.label_altitude, LV_ALIGN_OUT_BOTTOM_LEFT, 0,
                     5);
     
     // Create Altitude label
     lcd_status.label_gyro = lv_label_create(lv_scr_act());
+    lv_obj_add_style(lcd_status.label_gyro, &lcd_status.style_number, 0);
     lv_label_set_text(lcd_status.label_gyro, "Gyro: 00.00, 00.00, 00.00");
     lv_obj_align_to(lcd_status.label_gyro, lcd_status.label_accel, LV_ALIGN_OUT_BOTTOM_LEFT, 0,
                     5);
@@ -127,7 +134,6 @@ static void lcd_update() {
     char buf[32];
     snprintf(buf, sizeof(buf), "Gyro: %7.3f, %7.3f, %7.3f", lcd_status.gyro[0], lcd_status.gyro[1], lcd_status.gyro[2]);
     lv_label_set_text(lcd_status.label_gyro, buf);
-    vTaskDelay(pdMS_TO_TICKS(10));
     lv_task_handler();
 }
 

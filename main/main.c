@@ -22,9 +22,12 @@ void app_main(void)
     // gps_init();
     imu_init();
     
-    while(1)
-    {
-        // imu_read();
-        // vTaskDelay(pdMS_TO_TICKS(500));
-    }
+    // while(1)
+    // {
+    //     // imu_read();
+    //     // vTaskDelay(pdMS_TO_TICKS(500));
+
+    //     vTaskDelay(pdMS_TO_TICKS(10));
+    //     lv_task_handler();
+    // }
 }
