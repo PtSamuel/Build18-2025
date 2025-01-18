@@ -32,8 +32,9 @@ typedef struct {
     lv_obj_t* label_status;
     lv_obj_t* label_desc;
     lv_obj_t* label_time;
-    lv_obj_t* label_latitude;
-    lv_obj_t* label_longitude;
+    // lv_obj_t* label_latitude;
+    // lv_obj_t* label_longitude;
+    lv_obj_t* label_lat_long;
     lv_obj_t* label_velocity;
     lv_obj_t* label_altitude;
     lv_obj_t* label_accel;
@@ -49,7 +50,7 @@ static lcd_status_t lcd_status;
 void create_interface() {
     ESP_LOGI(TAG, "Creating interface...");
 
-    lv_theme_default_init(NULL, lv_palette_main(LV_PALETTE_BLUE), lv_palette_main(LV_PALETTE_RED), LV_THEME_DEFAULT_DARK, &lv_font_montserrat_20);
+    lv_theme_default_init(NULL, lv_palette_main(LV_PALETTE_BLUE), lv_palette_main(LV_PALETTE_RED), LV_THEME_DEFAULT_DARK, &lv_font_montserrat_14);
 
     lv_style_init(&lcd_status.style_title);
     // lv_style_set_text_font(&lcd_status.style_title, &lv_font_montserrat_20);
@@ -58,54 +59,58 @@ void create_interface() {
     lv_style_init(&lcd_status.style_number);
     lv_style_set_text_font(&lcd_status.style_number, &lv_font_unscii_8);
 
+    lv_obj_t *win = lv_win_create(lv_scr_act(), 40);  // Create a window with a header height of 40 pixels
+    lv_obj_t *title_label = lv_win_add_title(win, "  Window 1");                    // Set the title of the window
+    lv_obj_align(title_label, LV_ALIGN_CENTER, 0, 0);  // Align to the center of the window header
+    lv_obj_add_style(title_label, &lcd_status.style_title, 0);
+
     // Create Status label
-    lcd_status.label_status = lv_label_create(lv_scr_act());
+    lcd_status.label_status = lv_label_create(lv_win_get_content(win));
     lv_obj_add_style(lcd_status.label_status, &lcd_status.style_title, 0);
     lv_label_set_text(lcd_status.label_status, "Status: Normal");
     lv_obj_align(lcd_status.label_status, LV_ALIGN_TOP_LEFT, 10, 10);
 
     // Create Description label
-    lcd_status.label_desc = lv_label_create(lv_scr_act());
+    lcd_status.label_desc = lv_label_create(lv_win_get_content(win));
+    lv_obj_add_style(lcd_status.label_desc, &lcd_status.style_number, 0);
     lv_label_set_text(lcd_status.label_desc, "Desc: some string");
     lv_obj_align_to(lcd_status.label_desc, lcd_status.label_status, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 5);
 
     // Create Time label
-    lcd_status.label_time = lv_label_create(lv_scr_act());
+    lcd_status.label_time = lv_label_create(lv_win_get_content(win));
+    lv_obj_add_style(lcd_status.label_time, &lcd_status.style_number, 0);
     lv_label_set_text(lcd_status.label_time, "Time: 00:00:00 GTC");
-    lv_obj_align_to(lcd_status.label_time, lcd_status.label_desc, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 20);
+    lv_obj_align_to(lcd_status.label_time, lcd_status.label_desc, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 10);
 
     // Create Longitude label
-    lcd_status.label_latitude = lv_label_create(lv_scr_act());
-    lv_label_set_text(lcd_status.label_latitude, "Longitude: 000.00");
-    lv_obj_align_to(lcd_status.label_latitude, lcd_status.label_time, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 5);
-
-    // Create Latitude label
-    lcd_status.label_longitude = lv_label_create(lv_scr_act());
-    lv_label_set_text(lcd_status.label_longitude, "Latitude: 00.00");
-    lv_obj_align_to(lcd_status.label_longitude, lcd_status.label_latitude, LV_ALIGN_OUT_BOTTOM_LEFT, 0,
-                    5);
+    lcd_status.label_lat_long = lv_label_create(lv_win_get_content(win));
+    lv_obj_add_style(lcd_status.label_lat_long, &lcd_status.style_number, 0);
+    lv_label_set_text(lcd_status.label_lat_long, "Lat-Long: 000.00,000.00");
+    lv_obj_align_to(lcd_status.label_lat_long, lcd_status.label_time, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 5);
 
     // Create Velocity label
-    lcd_status.label_velocity = lv_label_create(lv_scr_act());
+    lcd_status.label_velocity = lv_label_create(lv_win_get_content(win));
+    lv_obj_add_style(lcd_status.label_velocity, &lcd_status.style_number, 0);
     lv_label_set_text(lcd_status.label_velocity, "Velocity: 00.00");
-    lv_obj_align_to(lcd_status.label_velocity, lcd_status.label_longitude, LV_ALIGN_OUT_BOTTOM_LEFT, 0,
+    lv_obj_align_to(lcd_status.label_velocity, lcd_status.label_lat_long, LV_ALIGN_OUT_BOTTOM_LEFT, 0,
                     5);
 
     // Create Altitude label
-    lcd_status.label_altitude = lv_label_create(lv_scr_act());
+    lcd_status.label_altitude = lv_label_create(lv_win_get_content(win));
+    lv_obj_add_style(lcd_status.label_altitude, &lcd_status.style_number, 0);
     lv_label_set_text(lcd_status.label_altitude, "Altitude: 00.00");
     lv_obj_align_to(lcd_status.label_altitude, lcd_status.label_velocity, LV_ALIGN_OUT_BOTTOM_LEFT, 0,
                     5);
     
     // Create Accel label
-    lcd_status.label_accel = lv_label_create(lv_scr_act());
+    lcd_status.label_accel = lv_label_create(lv_win_get_content(win));
     lv_obj_add_style(lcd_status.label_accel, &lcd_status.style_number, 0);
     lv_label_set_text(lcd_status.label_accel, "Accel: 00.00, 00.00, 00.00");
     lv_obj_align_to(lcd_status.label_accel, lcd_status.label_altitude, LV_ALIGN_OUT_BOTTOM_LEFT, 0,
                     5);
     
     // Create Altitude label
-    lcd_status.label_gyro = lv_label_create(lv_scr_act());
+    lcd_status.label_gyro = lv_label_create(lv_win_get_content(win));
     lv_obj_add_style(lcd_status.label_gyro, &lcd_status.style_number, 0);
     lv_label_set_text(lcd_status.label_gyro, "Gyro: 00.00, 00.00, 00.00");
     lv_obj_align_to(lcd_status.label_gyro, lcd_status.label_accel, LV_ALIGN_OUT_BOTTOM_LEFT, 0,
@@ -132,7 +137,7 @@ void lcd_set_gyro(float x, float y, float z) {
 
 static void lcd_update() {
     char buf[32];
-    snprintf(buf, sizeof(buf), "Gyro: %7.3f, %7.3f, %7.3f", lcd_status.gyro[0], lcd_status.gyro[1], lcd_status.gyro[2]);
+    snprintf(buf, sizeof(buf), "Gyro: %7.3f,%7.3f,%7.3f", lcd_status.gyro[0], lcd_status.gyro[1], lcd_status.gyro[2]);
     lv_label_set_text(lcd_status.label_gyro, buf);
     lv_task_handler();
 }
