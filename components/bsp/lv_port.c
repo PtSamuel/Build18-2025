@@ -171,45 +171,11 @@ static void lcd_init(void)
     st7789_driver_hw_init(&st7789_config);
 }
 
-/**
- * @brief 触摸芯片初始化
- *
- * @return NULL
- */
-static void tp_init(void)
-{
-    cst816t_cfg_t cst816t_config;
-    cst816t_config.sda = GPIO_NUM_23;
-    cst816t_config.scl = GPIO_NUM_22;
-    cst816t_config.x_limit = LCD_HEIGHT;    //由于屏幕显示旋转了90°，X和Y触摸需要调转
-    cst816t_config.y_limit = LCD_WIDTH;
-    //cst816t_config.x_limit = LCD_WIDTH;
-    //cst816t_config.y_limit = LCD_HEIGHT;
-    cst816t_config.fre = 200*1000;
-    
-
-    cst816t_init(&cst816t_config);
-}
-
-
 esp_err_t lv_port_init(void)
 {
-    /* 初始化LVGL库 */
     lv_init();
-
-    /*lcd接口初始化*/
-    // lcd_init();
-
-    /* 注册显示驱动 */
+    lcd_init();
     lv_port_disp_init();
-
-    /*触摸芯片初始化*/
-    // tp_init();
-
-    /* 注册输入驱动*/
-    // lv_port_indev_init();
-
-    /* 初始化LVGL定时器 */
     lv_port_tick_init();
 
     return ESP_OK;

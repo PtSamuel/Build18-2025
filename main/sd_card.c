@@ -23,6 +23,36 @@ static FILE *f;
 uint8_t sd_card_buffer[1024];
 SemaphoreHandle_t sd_card_write_protect;
 
+static void dump_file(FILE *file)
+{
+    int i = 0;
+    char buffer[64];
+    size_t bytes_read;
+
+    while ((bytes_read = fread(buffer, 1, sizeof(buffer), file)) > 0) {
+        ESP_LOGI(TAG, "%s", buffer);
+    }
+}
+
+void sd_card_dump_files()
+{
+    int i = 0;
+    FILE *file;
+    while(true) {
+        snprintf(filename, 32, MOUNT_POINT"/log_%d.txt", i);
+        ESP_LOGI(TAG, "Scanning file %s", filename);
+        file = fopen(filename, "r"); 
+        if (file) {
+            dump_file(file);
+            fclose(file);
+            i++;
+        } else {
+            ESP_LOGI(TAG, "File: %s does not exist", filename);
+            break;
+        }
+    }
+}
+
 static esp_err_t create_file()
 {
     int i = 0;

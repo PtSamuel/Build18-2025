@@ -1,4 +1,5 @@
 #include "gps.h"
+#include "lcd.h"
 
 #include "esp_log.h"
 #include "driver/gpio.h"
@@ -26,6 +27,8 @@ static const char *TAG = "IMU";
 static spi_device_handle_t spi; 
 
 static uint8_t rx_buf[14];
+
+const static uint32_t tick_inc_period_ms = 500;
 
 static void swap_16_bit_bytes(void *arr, int size) {
     uint8_t *data = arr;
@@ -73,6 +76,7 @@ static void imu_read_interrupt() {
     // ESP_LOGI(TAG, "Register values: (%d, %d, %d, %d, %d, %d, %d)", registers_signed[0], registers_signed[1], registers_signed[2], registers_signed[3], registers_signed[4], registers_signed[5], registers_signed[6]);
     // ESP_LOGI(TAG, "%f %d %f", INT16_RANGE, registers_signed[1], INT16_TO_MINUS_PLUS_ONE(registers_signed[1]));
     ESP_LOGI(TAG, "Register values: (%f, %f, %f, %f, %f, %f, %f)", temperature, accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z);
+    lcd_set_gyro(gyro_x, gyro_x, gyro_z);
 }
 
 void imu_init() {
@@ -128,7 +132,7 @@ void imu_init() {
     };
     gpio_config(&led_gpio_cfg);
 
-    static uint32_t tick_inc_period_ms = 500;
+    
     const esp_timer_create_args_t periodic_timer_args = {
         .callback = imu_read_interrupt,
         .name = "imu_read_interrupt",
